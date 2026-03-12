@@ -3,9 +3,7 @@ const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
-const cron = require("node-cron");
 const logger = require("./utils/logger");
-const { runIngestion } = require("./jobs/ingestion");
 
 // Routes
 const authRoutes = require("./routes/auth");
@@ -20,7 +18,7 @@ const app = express();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: (process.env.ALLOWED_ORIGINS || "").split(","),
+  origin: (process.env.ALLOWED_ORIGINS || "*").split(","),
   credentials: true,
 }));
 app.use(express.json({ limit: "10kb" }));
@@ -36,7 +34,7 @@ app.use(rateLimit({
 
 // Request logging
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path}`, { ip: req.ip, apiKey: req.headers["x-api-key"]?.slice(0, 8) });
+  logger.info(`${req.method} ${req.path}`, { ip: req.ip });
   next();
 });
 
@@ -60,15 +58,8 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  logger.error("Unhandled error", { error: err.message, stack: err.stack });
+  logger.error("Unhandled error", { error: err.message });
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
-});
-
-// Scheduled ingestion job
-const ingestionCron = process.env.INGESTION_CRON || "0 */6 * * *";
-cron.schedule(ingestionCron, async () => {
-  logger.info("Running scheduled ingestion job");
-  await runIngestion();
 });
 
 const PORT = process.env.PORT || 3000;

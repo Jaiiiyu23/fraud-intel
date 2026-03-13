@@ -6,6 +6,7 @@ import cron from "node-cron";
 import reportRoutes from "./routes/reports.js";
 import statsRoutes from "./routes/stats.js";
 import detectRoutes from "./routes/detect.js";
+import threatsRoutes from "./routes/threats.js"
 
 import { ingestReddit } from "./jobs/redditIngestion.js";
 
@@ -22,6 +23,7 @@ Routes
 app.use("/api/reports", reportRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/detect", detectRoutes);
+app.use("/api/threats", threatsRoutes)
 
 const PORT = process.env.PORT || 5000;
 

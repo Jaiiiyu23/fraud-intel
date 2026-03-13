@@ -1,37 +1,36 @@
 const express = require("express");
+const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const { requireAuth } = require("../middleware/auth");
 
-const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /api/v1/stats/overview
 router.get("/overview", requireAuth, async (req, res) => {
   try {
-    const [total, byType, bySeverity, recentCount] = await Promise.all([
+    const [totalReports, totalNetworks, recentReports] = await Promise.all([
       prisma.fraudReport.count(),
-      prisma.fraudReport.groupBy({ by: ["fraudType"], _count: true }),
-      prisma.fraudReport.groupBy({ by: ["severity"], _count: true }),
-      prisma.fraudReport.count({
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      prisma.scamNetwork.count(),
+      prisma.fraudReport.findMany({
+        take: 100,
+        select: { location: true, fraudType: true, severity: true },
       }),
     ]);
-    res.json({ total, byType, bySeverity, recentCount });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch stats" });
-  }
-});
 
-// GET /api/v1/stats/region/:state
-router.get("/region/:state", requireAuth, async (req, res) => {
-  try {
-    const reports = await prisma.fraudReport.findMany({
-      where: { state: { contains: req.params.state, mode: "insensitive" } },
-      select: { fraudType: true, severity: true, estimatedLossInr: true, createdAt: true },
+    // Count unique states
+    const stateSet = new Set();
+    recentReports.forEach(r => { if (r.location) stateSet.add(r.location); });
+
+    res.json({
+      totalReports,
+      totalNetworks,
+      statesAffected: stateSet.size,
+      fraudTypeBreakdown: recentReports.reduce((acc, r) => {
+        if (r.fraudType) acc[r.fraudType] = (acc[r.fraudType] || 0) + 1;
+        return acc;
+      }, {}),
     });
-    res.json({ state: req.params.state, total: reports.length, reports });
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch region stats" });
+    res.status(500).json({ error: err.message });
   }
 });
 

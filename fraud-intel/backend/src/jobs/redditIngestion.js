@@ -1,6 +1,6 @@
 import axios from "axios";
 import { PrismaClient } from "@prisma/client";
-import classifyFraud from "../classify.js";
+import { classifyFraud } from "../classify.js";
 
 const prisma = new PrismaClient();
 

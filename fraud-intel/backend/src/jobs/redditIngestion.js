@@ -21,13 +21,24 @@ export async function ingestReddit() {
     for (const post of posts) {
       const data = post.data;
 
+      const reportCode = `RED-${data.id}`;
       const rawText = `${data.title} ${data.selftext}`;
+
+      // 🔎 check if already saved
+      const exists = await prisma.fraudReport.findUnique({
+        where: { reportCode }
+      });
+
+      if (exists) {
+        console.log("Skipping duplicate:", reportCode);
+        continue;
+      }
 
       await prisma.fraudReport.create({
         data: {
-          reportCode: `RED-${data.id}`,
+          reportCode,
           rawText,
-          sourceType: "TWITTER_SCRAPE", // temporary source
+          sourceType: "REDDIT",
           fraudType: "OTHER",
           severity: "MEDIUM",
           confidence: 0.5,
@@ -38,7 +49,7 @@ export async function ingestReddit() {
         }
       });
 
-      console.log("Saved Reddit report:", data.id);
+      console.log("Saved Reddit report:", reportCode);
     }
 
     console.log("Reddit ingestion completed");

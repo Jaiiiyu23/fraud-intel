@@ -1,23 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "react"
 
 function App() {
 
-  const [stats, setStats] = useState(null);
-  const [threats, setThreats] = useState(null);
+  const API = "https://fraud-intel-production.up.railway.app"
 
-  const API = "https://fraud-intel-production.up.railway.app";
+  const [stats, setStats] = useState(null)
+  const [threats, setThreats] = useState(null)
 
   useEffect(() => {
 
     fetch(API + "/api/stats")
       .then(res => res.json())
-      .then(data => setStats(data));
+      .then(data => setStats(data))
 
     fetch(API + "/api/threats")
       .then(res => res.json())
-      .then(data => setThreats(data));
+      .then(data => setThreats(data))
 
-  }, []);
+  }, [])
 
   return (
 
@@ -29,7 +29,7 @@ function App() {
       fontFamily:"Arial"
     }}>
 
-      <h1 style={{fontSize:"32px", marginBottom:"30px"}}>
+      <h1 style={{fontSize:"34px", marginBottom:"30px"}}>
         Fraud Intel Dashboard
       </h1>
 
@@ -56,11 +56,14 @@ function App() {
 
       {threats && (
         <div style={{background:"#1e293b", padding:"20px", borderRadius:"10px"}}>
-
           <h2>Top Fraud Types</h2>
 
           {threats.topThreats.map(t => (
-            <div key={t.fraudType} style={{display:"flex", justifyContent:"space-between", marginTop:"10px"}}>
+            <div key={t.fraudType} style={{
+              display:"flex",
+              justifyContent:"space-between",
+              marginTop:"10px"
+            }}>
               <span>{t.fraudType}</span>
               <span>{t.reports}</span>
             </div>
@@ -70,7 +73,8 @@ function App() {
       )}
 
     </div>
-  );
+
+  )
 }
 
-export default App;
+export default App

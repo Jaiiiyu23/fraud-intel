@@ -1,6 +1,7 @@
 {
   "name": "fraud-intel-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Fraud Intelligence Platform API",
   "main": "src/index.js",
   "scripts": {

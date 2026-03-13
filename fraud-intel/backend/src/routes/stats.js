@@ -5,32 +5,25 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 /*
-GET /api/stats
-Return basic dashboard statistics
+GET stats
 */
 router.get("/", async (req, res) => {
-try {
+  try {
+    const totalReports = await prisma.fraudReport.count();
 
-```
-const totalReports = await prisma.fraudReport.count();
+    const fraudTypes = await prisma.fraudReport.groupBy({
+      by: ["type"],
+      _count: true
+    });
 
-res.json({
-  totalReports,
-  status: "ok"
-});
-```
-
-} catch (error) {
-
-```
-console.error("Stats route error:", error);
-
-res.status(500).json({
-  error: error.message
-});
-```
-
-}
+    res.json({
+      totalReports,
+      fraudTypes
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

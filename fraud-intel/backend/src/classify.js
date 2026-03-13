@@ -1,21 +1,23 @@
-const express = require("express");
-const { requireAuth } = require("../middleware/auth");
-const { classifyFraudReport } = require("../services/classifier");
+export function classifyFraud(text) {
 
-const router = express.Router();
+const t = text.toLowerCase()
 
-// POST /api/v1/classify
-router.post("/", requireAuth, async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text || text.trim().length < 10) {
-      return res.status(400).json({ error: "text must be at least 10 characters" });
-    }
-    const result = await classifyFraudReport(text);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+if (t.includes("upi") || t.includes("qr")) {
+  return "UPI Scam"
+}
 
-module.exports = router;
+if (t.includes("telegram") || t.includes("crypto")) {
+  return "Investment Scam"
+}
+
+if (t.includes("job") || t.includes("work from home")) {
+  return "Job Scam"
+}
+
+if (t.includes("otp") || t.includes("bank")) {
+  return "Banking Fraud"
+}
+
+return "Other Fraud"
+
+}

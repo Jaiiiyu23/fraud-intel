@@ -1,0 +1,41 @@
+const jwt = require("jsonwebtoken");
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+
+async function requireJWT(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+  try {
+    const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+async function requireApiKey(req, res, next) {
+  const key = req.headers["x-api-key"];
+  if (!key) return next();
+  const apiKey = await prisma.apiKey.findUnique({ where: { key } });
+  if (!apiKey || !apiKey.isActive) return res.status(401).json({ error: "Invalid API key" });
+  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) return res.status(401).json({ error: "API key expired" });
+  await prisma.apiKey.update({ where: { id: apiKey.id }, data: { usageCount: { increment: 1 }, lastUsedAt: new Date() } });
+  req.user = { orgId: apiKey.orgId, role: "ANALYST" };
+  next();
+}
+
+async function requireAuth(req, res, next) {
+  const key = req.headers["x-api-key"];
+  if (key) return requireApiKey(req, res, next);
+  return requireJWT(req, res, next);
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "ADMIN") return res.status(403).json({ error: "Admin only" });
+  next();
+}
+
+module.exports = { requireJWT, requireApiKey, requireAuth, requireAdmin };

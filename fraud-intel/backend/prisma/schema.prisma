@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  type      OrgType
+  email     String   @unique
+  createdAt DateTime @default(now())
+  users     User[]
+  apiKeys   ApiKey[]
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  name         String
+  role         Role         @default(ANALYST)
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id])
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+}
+
+model ApiKey {
+  id          String       @id @default(uuid())
+  key         String       @unique
+  name        String
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  permissions String[]
+  rateLimit   Int          @default(1000)
+  usageCount  Int          @default(0)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+}
+
+model FraudReport {
+  id               String      @id @default(uuid())
+  reportCode       String      @unique
+  rawText          String
+  sourceType       SourceType
+  sourceUrl        String?
+  fraudType        FraudType
+  severity         Severity
+  confidence       Float
+  modusOperandi    String?
+  estimatedLossInr Float?
+  targetDemographic String?
+  suggestedAction  String?
+  redFlags         String[]
+  state            String?
+  city             String?
+  linkedKeywords   String[]
+  networkId        String?
+  network          ScamNetwork? @relation(fields: [networkId], references: [id])
+  createdAt        DateTime    @default(now())
+}
+
+model ScamNetwork {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  reports     FraudReport[]
+  createdAt   DateTime      @default(now())
+}
+
+model IngestionLog {
+  id         String     @id @default(uuid())
+  source     SourceType
+  itemsFound Int
+  itemsSaved Int
+  errors     String[]
+  createdAt  DateTime   @default(now())
+}
+
+enum OrgType {
+  GOVERNMENT
+  NGO
+  LAW_ENFORCEMENT
+  RESEARCH
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum SourceType {
+  TWITTER_SCRAPE
+  CYBERCRIME_PORTAL
+  API_SUBMISSION
+  PARTNER_NGO
+  MANUAL
+}
+
+enum FraudType {
+  UPI_PAYMENT_FRAUD
+  INVESTMENT_SCAM
+  JOB_RECRUITMENT_FRAUD
+  KYC_IMPERSONATION
+  CYBER_BLACKMAIL
+  LOTTERY_FRAUD
+  PHISHING
+  OTHER
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}

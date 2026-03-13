@@ -1,49 +1,48 @@
 import axios from "axios";
 import { PrismaClient } from "@prisma/client";
-import { classifyFraud } from "../classify.js";
 
 const prisma = new PrismaClient();
 
 export async function ingestReddit() {
-
   try {
+    console.log("Fetching Reddit scam posts...");
 
-    console.log("Starting Reddit ingestion...");
-
-    const url = "https://www.reddit.com/search.json?q=scam%20india&limit=25";
-
-    const res = await axios.get(url, {
-      headers: {
-        "User-Agent": "fraud-intel-app"
+    const response = await axios.get(
+      "https://www.reddit.com/r/Scams/new.json?limit=10",
+      {
+        headers: {
+          "User-Agent": "fraud-intel-bot"
+        }
       }
-    });
+    );
 
-    const posts = res.data.data.children;
+    const posts = response.data.data.children;
 
-    for (const p of posts) {
+    for (const post of posts) {
+      const data = post.data;
 
-      const title = p.data.title;
-      const description = title + " " + (p.data.selftext || "");
+      const rawText = `${data.title} ${data.selftext}`;
 
-      const fraudType = classifyFraud(description);
-
-      await prisma.report.create({
+      await prisma.fraudReport.create({
         data: {
-          title: title,
-          description: description,
-          source: "reddit",
-          fraudType: fraudType
+          reportCode: `RED-${data.id}`,
+          rawText,
+          sourceType: "TWITTER_SCRAPE", // temporary source
+          fraudType: "OTHER",
+          severity: "MEDIUM",
+          confidence: 0.5,
+          redFlags: [],
+          linkedKeywords: [],
+          state: null,
+          city: null
         }
       });
 
+      console.log("Saved Reddit report:", data.id);
     }
 
-    console.log("Reddit reports inserted successfully");
-
+    console.log("Reddit ingestion completed");
   } catch (err) {
-
-    console.error("Reddit ingestion failed:", err.message);
-
+    console.error("Reddit ingestion error:", err);
   }
-
 }

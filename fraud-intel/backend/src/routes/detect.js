@@ -1,10 +1,12 @@
-const express = require("express")
+import express from "express"
+import { detectFraud } from "../services/aiEngine.js"
+
 const router = express.Router()
 
-const { detectFraud } = require("../services/aiEngine")
-
 router.post("/", async (req, res) => {
+
   try {
+
     const { text } = req.body
 
     if (!text) {
@@ -16,9 +18,15 @@ router.post("/", async (req, res) => {
     res.json(result)
 
   } catch (err) {
+
     console.error(err)
-    res.status(500).json({ error: "AI detection failed" })
+
+    res.status(500).json({
+      error: "AI detection failed"
+    })
+
   }
+
 })
 
 export default router

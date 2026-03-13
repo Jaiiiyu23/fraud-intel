@@ -1,137 +1,120 @@
 const express = require("express");
-const { PrismaClient } = require("@prisma/client");
-const { z } = require("zod");
-const { requireAuth } = require("../middleware/auth");
-const { classifyFraudReport } = require("../services/classifier");
-const { generateReportCode } = require("../utils/helpers");
-const { detectNetworks } = require("../services/networkDetector");
-
 const router = express.Router();
+const { PrismaClient } = require("@prisma/client");
+const { requireAuth } = require("../middleware/auth");
+const { generateReportCode } = require("../utils/helpers");
+
 const prisma = new PrismaClient();
 
-// GET /api/v1/reports
-// Query params: type, severity, state, city, from, to, page, limit
+// Rule-based classifier (no AI credits needed)
+function ruleBasedClassify(text) {
+  const t = text.toLowerCase();
+  let fraudType = "OTHER_FRAUD";
+  let severity = "MEDIUM";
+  let confidence = 0.72;
+  const redFlags = [];
+  const suspiciousNumbers = [];
+
+  if (t.match(/upi|gpay|phonepe|paytm|bhim|payment|transaction/)) fraudType = "UPI_PAYMENT_FRAUD";
+  else if (t.match(/kyc|aadhar|pan|bank account|otp|verify.*account/)) fraudType = "IMPERSONATION_KYC";
+  else if (t.match(/investment|stock|trading|sebi|mutual fund|return|profit/)) fraudType = "INVESTMENT_STOCK_SCAM";
+  else if (t.match(/job|recruitment|offer letter|salary|work from home/)) fraudType = "JOB_RECRUITMENT_FRAUD";
+  else if (t.match(/sextortion|blackmail|video|nude|intimate/)) fraudType = "CYBER_BLACKMAIL";
+  else if (t.match(/lottery|prize|winner|kbc|claim.*reward/)) fraudType = "LOTTERY_PRIZE_FRAUD";
+
+  const amountMatch = t.match(/(?:rs|₹|inr)\.?\s*([0-9,]+)/);
+  if (amountMatch) {
+    const amount = parseInt(amountMatch[1].replace(/,/g, ""));
+    if (amount >= 1000000) severity = "CRITICAL";
+    else if (amount >= 100000) severity = "HIGH";
+    else if (amount >= 10000) severity = "MEDIUM";
+    else severity = "LOW";
+  }
+
+  let location = null;
+  const states = ["maharashtra","mumbai","delhi","bangalore","bengaluru","hyderabad","chennai","kolkata","rajasthan","gujarat","ahmedabad","pune","lucknow","uttar pradesh","karnataka","tamil nadu","kerala","bihar","haryana","west bengal","goa","assam","punjab"];
+  for (const s of states) { if (t.includes(s)) { location = s.charAt(0).toUpperCase() + s.slice(1); break; } }
+
+  if (t.match(/whatsapp|telegram/)) redFlags.push("Contact via messaging app");
+  if (t.match(/otp/)) redFlags.push("OTP requested");
+  if (t.match(/urgent|immediately/)) redFlags.push("Urgency pressure tactic");
+  if (t.match(/link|click/)) redFlags.push("Suspicious link shared");
+
+  const phones = text.match(/(?:\+91|0)?[6-9]\d{9}/g);
+  if (phones) suspiciousNumbers.push(...phones.slice(0, 3));
+
+  return { fraudType, severity, confidence, location, redFlags, suspiciousNumbers, suspiciousUrls: [], suggestedAction: severity === "CRITICAL" ? "ESCALATE_TO_NODAL" : severity === "HIGH" ? "INVESTIGATE_IMMEDIATELY" : "MONITOR", summary: text.substring(0, 200) };
+}
+
+// GET all reports (no org filter — platform-wide)
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { type, severity, state, city, from, to, page = 1, limit = 20, search } = req.query;
+    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page) || 1;
+    const skip = (page - 1) * limit;
 
-    const where = {};
-    if (type) where.fraudType = type;
-    if (severity) where.severity = severity;
-    if (state) where.state = { contains: state, mode: "insensitive" };
-    if (city) where.city = { contains: city, mode: "insensitive" };
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to) where.createdAt.lte = new Date(to);
-    }
-    if (search) {
-      where.OR = [
-        { rawText: { contains: search, mode: "insensitive" } },
-        { modusOperandi: { contains: search, mode: "insensitive" } },
-        { reportCode: { contains: search, mode: "insensitive" } },
-      ];
-    }
-
-    const [reports, total] = await Promise.all([
-      prisma.fraudReport.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip: (parseInt(page) - 1) * parseInt(limit),
-        take: parseInt(limit),
-        select: {
-          id: true, reportCode: true, fraudType: true, severity: true,
-          confidence: true, modusOperandi: true, estimatedLossInr: true,
-          state: true, city: true, sourceType: true, networkId: true,
-          redFlags: true, suggestedAction: true, createdAt: true,
-        },
-      }),
-      prisma.fraudReport.count({ where }),
-    ]);
-
-    res.json({
-      data: reports,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit)),
-      },
+    const reports = await prisma.fraudReport.findMany({
+      take: limit,
+      skip,
+      orderBy: { createdAt: "desc" },
     });
+    res.json(reports);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch reports" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v1/reports/:id
-router.get("/:id", requireAuth, async (req, res) => {
-  const report = await prisma.fraudReport.findFirst({
-    where: { OR: [{ id: req.params.id }, { reportCode: req.params.id }] },
-    include: { network: true },
-  });
-  if (!report) return res.status(404).json({ error: "Report not found" });
-  res.json(report);
-});
-
-// POST /api/v1/reports
-// Submit a new fraud report (auto-classified by AI)
+// POST new report — classify with AI or rule-based fallback
 router.post("/", requireAuth, async (req, res) => {
   try {
-    const { rawText, sourceType = "API_SUBMISSION", sourceUrl } = req.body;
+    const { rawText, sourceType = "MANUAL_SUBMISSION" } = req.body;
     if (!rawText || rawText.trim().length < 10) {
-      return res.status(400).json({ error: "rawText must be at least 10 characters" });
+      return res.status(400).json({ error: "Report text too short" });
     }
 
-    // AI classify
-    const classification = await classifyFraudReport(rawText);
-    const reportCode = generateReportCode();
+    let classification = ruleBasedClassify(rawText);
+
+    // Try AI classification if credits available
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const Anthropic = require("@anthropic-ai/sdk");
+        const client = new Anthropic();
+        const response = await client.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 400,
+          messages: [{ role: "user", content: `Classify this Indian cybercrime report as JSON only (no markdown). Fields: fraudType (UPI_PAYMENT_FRAUD|INVESTMENT_STOCK_SCAM|JOB_RECRUITMENT_FRAUD|IMPERSONATION_KYC|CYBER_BLACKMAIL|LOTTERY_PRIZE_FRAUD|OTHER_FRAUD), severity (LOW|MEDIUM|HIGH|CRITICAL), confidence (0-1 float), location (Indian city/state string or null), redFlags (string array max 3), suspiciousNumbers (string array), suggestedAction (string), summary (string max 150 chars). Text: "${rawText.substring(0, 500)}"` }],
+        });
+        const raw = response.content[0].text.replace(/```json|```/g, "").trim();
+        classification = { ...classification, ...JSON.parse(raw) };
+      } catch (e) {
+        // Use rule-based fallback silently
+      }
+    }
 
     const report = await prisma.fraudReport.create({
       data: {
-        reportCode,
+        reportCode: generateReportCode(),
         rawText,
         sourceType,
-        sourceUrl,
+        submittedById: req.user?.id || null,
         ...classification,
       },
     });
 
-    // Async: check if this links to an existing network
-    detectNetworks(report).catch(console.error);
-
-    res.status(201).json({
-      reportCode: report.reportCode,
-      id: report.id,
-      classification: {
-        fraudType: report.fraudType,
-        severity: report.severity,
-        confidence: report.confidence,
-        modusOperandi: report.modusOperandi,
-        estimatedLossInr: report.estimatedLossInr,
-        suggestedAction: report.suggestedAction,
-        redFlags: report.redFlags,
-        state: report.state,
-        city: report.city,
-      },
-    });
+    res.json(report);
   } catch (err) {
-    res.status(500).json({ error: err.message || "Failed to submit report" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v1/reports/stats/summary
-router.get("/stats/summary", requireAuth, async (req, res) => {
+// GET single report
+router.get("/:id", requireAuth, async (req, res) => {
   try {
-    const [total, byType, bySeverity, byState] = await Promise.all([
-      prisma.fraudReport.count(),
-      prisma.fraudReport.groupBy({ by: ["fraudType"], _count: true, orderBy: { _count: { fraudType: "desc" } } }),
-      prisma.fraudReport.groupBy({ by: ["severity"], _count: true }),
-      prisma.fraudReport.groupBy({ by: ["state"], _count: true, where: { state: { not: null } }, orderBy: { _count: { state: "desc" } }, take: 10 }),
-    ]);
-
-    res.json({ total, byType, bySeverity, byState });
+    const report = await prisma.fraudReport.findUnique({ where: { id: req.params.id } });
+    if (!report) return res.status(404).json({ error: "Not found" });
+    res.json(report);
   } catch (err) {
-    res.status(500).json({ error: "Failed to get stats" });
+    res.status(500).json({ error: err.message });
   }
 });
 

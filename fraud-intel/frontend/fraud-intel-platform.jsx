@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+const API = "https://fraud-intel-production.up.railway.app";
+
 const COLORS = {
   bg: "#0a0c10", surface: "#111318", border: "#1e2330",
   accent: "#ff3b3b", accentDim: "#ff3b3b22", accentSoft: "#ff6b6b",

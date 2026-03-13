@@ -1,181 +1,174 @@
 import { useState, useEffect } from "react";
+import {
+  AlertTriangle,
+  Shield,
+  BarChart3,
+  Activity,
+  Brain,
+} from "lucide-react";
+
+import {
+  LineChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 
 const API = "https://fraud-intel-production.up.railway.app";
 
-const COLORS = {
-  bg: "#0a0c10",
-  surface: "#111318",
-  border: "#1e2330",
-  accent: "#ff3b3b",
-  gold: "#f5a623",
-  green: "#00d4aa",
-  blue: "#4a9eff",
-  text: "#e8eaf0",
-  textDim: "#7a8099"
+const chartData = [
+  { day: "Mon", cases: 120 },
+  { day: "Tue", cases: 180 },
+  { day: "Wed", cases: 240 },
+  { day: "Thu", cases: 200 },
+  { day: "Fri", cases: 260 },
+  { day: "Sat", cases: 300 },
+  { day: "Sun", cases: 280 },
+];
+
+function StatCard({ icon, title, value }) {
+  return (
+    <div style={cardStyle}>
+      <div style={{ marginBottom: 10 }}>{icon}</div>
+      <div style={{ fontSize: 28, fontWeight: 700 }}>{value}</div>
+      <div style={{ color: "#94a3b8", fontSize: 13 }}>{title}</div>
+    </div>
+  );
+}
+
+const cardStyle = {
+  background: "#111827",
+  padding: 24,
+  borderRadius: 12,
+  border: "1px solid #1f2937",
 };
 
-function StatCard({ label, value, color }) {
-  return (
-    <div
-      style={{
-        background: COLORS.surface,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 10,
-        padding: 20
-      }}
-    >
-      <div style={{ fontSize: 26, fontWeight: 800 }}>{value}</div>
-      <div style={{ fontSize: 12, color: COLORS.textDim }}>{label}</div>
-    </div>
-  );
-}
-
-function ClassifyPanel() {
-  const [text, setText] = useState("");
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const classify = async () => {
-    if (!text) return;
-
-    setLoading(true);
-
-    try {
-      const res = await fetch(API + "/api/classify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ text })
-      });
-
-      const data = await res.json();
-      setResult(data);
-    } catch (e) {
-      alert("classification failed");
-    }
-
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Paste suspicious message or fraud report..."
-        style={{
-          padding: 12,
-          borderRadius: 8,
-          border: `1px solid ${COLORS.border}`,
-          background: COLORS.bg,
-          color: COLORS.text
-        }}
-      />
-
-      <button
-        onClick={classify}
-        style={{
-          background: COLORS.accent,
-          color: "white",
-          border: "none",
-          padding: 10,
-          borderRadius: 8,
-          cursor: "pointer"
-        }}
-      >
-        {loading ? "Analyzing..." : "AI Classify"}
-      </button>
-
-      {result && (
-        <div
-          style={{
-            background: COLORS.surface,
-            padding: 12,
-            borderRadius: 8,
-            border: `1px solid ${COLORS.border}`
-          }}
-        >
-          <div><b>Fraud Type:</b> {result.fraud_type}</div>
-          <div><b>Severity:</b> {result.severity}</div>
-          <div><b>Confidence:</b> {result.confidence}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function FraudIntelPlatform() {
-  const [tab, setTab] = useState("dashboard");
+  const [stats, setStats] = useState({
+    total_reports: 0,
+    high_severity: 0,
+    medium_severity: 0,
+  });
 
-  const [stats, setStats] = useState(null);
-  const [threats, setThreats] = useState([]);
+  const [frauds, setFrauds] = useState([]);
 
   useEffect(() => {
-    fetch(API + "/api/stats")
+    fetch(API + "/stats")
       .then((r) => r.json())
-      .then((data) => setStats(data))
-      .catch(() => console.log("stats failed"));
+      .then((d) => setStats(d))
+      .catch(() => {});
 
-    fetch(API + "/api/threats")
+    fetch(API + "/fraud-types")
       .then((r) => r.json())
-      .then((data) => setThreats(data))
-      .catch(() => console.log("threats failed"));
+      .then((d) => setFrauds(d))
+      .catch(() => {});
   }, []);
 
   return (
-    <div
-      style={{
-        background: COLORS.bg,
-        minHeight: "100vh",
-        padding: 30,
-        color: COLORS.text,
-        fontFamily: "Segoe UI"
-      }}
-    >
-      <h2>Fraud Intel India</h2>
+    <div style={container}>
+      {/* Navbar */}
 
-      <div style={{ marginBottom: 20 }}>
-        <button onClick={() => setTab("dashboard")}>Dashboard</button>
-        <button onClick={() => setTab("classify")}>AI Classify</button>
+      <div style={navbar}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Shield size={24} color="#22c55e" />
+          <b>Fraud Intel</b>
+        </div>
+
+        <div style={{ display: "flex", gap: 20 }}>
+          <span>Dashboard</span>
+          <span>AI Classify</span>
+          <span>Reports</span>
+        </div>
       </div>
 
-      {tab === "dashboard" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
-          <StatCard
-            label="Total Reports"
-            value={stats ? stats.total_reports : "..."}
-          />
+      {/* Cards */}
 
-          <StatCard
-            label="Active Networks"
-            value={stats ? stats.active_networks : "..."}
-          />
+      <div style={grid}>
+        <StatCard
+          icon={<Activity size={22} />}
+          title="Total Reports"
+          value={stats.total_reports}
+        />
 
-          <StatCard
-            label="Estimated Loss"
-            value={stats ? stats.estimated_losses : "..."}
-          />
+        <StatCard
+          icon={<AlertTriangle size={22} color="#ef4444" />}
+          title="High Severity"
+          value={stats.high_severity}
+        />
 
-          <div style={{ gridColumn: "1 / span 3" }}>
-            <h3>Top Fraud Types</h3>
+        <StatCard
+          icon={<BarChart3 size={22} color="#f59e0b" />}
+          title="Medium Severity"
+          value={stats.medium_severity}
+        />
 
-            {threats.map((t, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: 10,
-                  borderBottom: `1px solid ${COLORS.border}`
-                }}
-              >
-                {t.type} — {t.count}
-              </div>
-            ))}
-          </div>
+        <StatCard
+          icon={<Brain size={22} color="#3b82f6" />}
+          title="AI Detections"
+          value="42"
+        />
+      </div>
+
+      {/* Chart */}
+
+      <div style={{ ...cardStyle, marginTop: 30 }}>
+        <h3>Fraud Reports Trend</h3>
+
+        <div style={{ height: 250 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <Line
+                type="monotone"
+                dataKey="cases"
+                stroke="#22c55e"
+                strokeWidth={2}
+              />
+              <Tooltip />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-      )}
+      </div>
 
-      {tab === "classify" && <ClassifyPanel />}
+      {/* Fraud Types */}
+
+      <div style={{ ...cardStyle, marginTop: 30 }}>
+        <h3>Top Fraud Types</h3>
+
+        {frauds.map((f, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "10px 0",
+              borderBottom: "1px solid #1f2937",
+            }}
+          >
+            <span>{f.type}</span>
+            <b>{f.count}</b>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+
+const container = {
+  background: "#0b0f19",
+  minHeight: "100vh",
+  padding: 40,
+  color: "#e2e8f0",
+  fontFamily: "Inter, sans-serif",
+};
+
+const navbar = {
+  display: "flex",
+  justifyContent: "space-between",
+  marginBottom: 30,
+};
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4,1fr)",
+  gap: 20,
+};

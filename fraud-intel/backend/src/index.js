@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import { reportRoutes } from "./routes/reports.js";
+import reportRoutes from "./routes/reports.js";
 import statsRoutes from "./routes/stats.js";
 
 import { ingestReddit } from "./jobs/redditIngestion.js";

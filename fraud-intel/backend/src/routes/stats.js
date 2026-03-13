@@ -6,29 +6,36 @@ const prisma = new PrismaClient();
 
 /*
 GET /api/stats
-Return simple statistics about reports
+Return dashboard statistics
 */
 router.get("/", async (req, res) => {
 try {
 const totalReports = await prisma.fraudReport.count();
 
 ```
-const latestReports = await prisma.fraudReport.findMany({
+const reports = await prisma.fraudReport.findMany({
+  select: {
+    id: true,
+    text: true,
+    sourceType: true,
+    createdAt: true
+  },
   orderBy: {
     createdAt: "desc"
   },
-  take: 10
+  take: 20
 });
 
 res.json({
   totalReports,
-  latestReports
+  reports
 });
 ```
 
-} catch (err) {
+} catch (error) {
+console.error(error);
 res.status(500).json({
-error: err.message
+error: error.message
 });
 }
 });

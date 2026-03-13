@@ -1,19 +1,24 @@
-import express from "express";
+const express = require("express")
+const router = express.Router()
 
-const router = express.Router();
+const { detectFraud } = require("../services/aiEngine")
 
 router.post("/", async (req, res) => {
-  const { text } = req.body;
+  try {
+    const { text } = req.body
 
-  const result = {
-    fraudType: "UPI_PAYMENT_FRAUD",
-    severity: "HIGH",
-    confidence: 0.9,
-    redFlags: ["Asked OTP", "Bank impersonation"],
-    linkedKeywords: ["otp", "bank", "upi"]
-  };
+    if (!text) {
+      return res.status(400).json({ error: "Text is required" })
+    }
 
-  res.json(result);
-});
+    const result = detectFraud(text)
 
-export default router;
+    res.json(result)
+
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: "AI detection failed" })
+  }
+})
+
+module.exports = router

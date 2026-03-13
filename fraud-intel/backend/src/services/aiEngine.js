@@ -54,4 +54,4 @@ function detectFraud(text) {
   }
 }
 
-module.exports = { detectFraud }
+export { detectFraud }
